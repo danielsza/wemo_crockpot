@@ -62,10 +62,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 _LOGGER.debug("Device mode_string: %s", data["mode_string"])
 
             if hasattr(device, 'remaining_time'):
-                data["remaining_time"] = device.remaining_time
+                # Handle sentinel value: 65535 (0xFFFF) means no timer set
+                remaining = device.remaining_time
+                data["remaining_time"] = 0 if remaining == 65535 else remaining
 
             if hasattr(device, 'cooked_time'):
-                data["cooked_time"] = device.cooked_time
+                # Handle sentinel value: 65535 (0xFFFF) means no time cooked
+                cooked = device.cooked_time
+                data["cooked_time"] = 0 if cooked == 65535 else cooked
 
             _LOGGER.debug("Coordinator update complete - data: %s", data)
             return data
