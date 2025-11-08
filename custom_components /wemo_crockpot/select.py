@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import logging
 
+from pywemo.ouimeaux_device.crockpot import CrockPotMode
+
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -52,43 +54,53 @@ class CrockpotModeSelect(CoordinatorEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         """Return the current mode."""
-        # Get state from coordinator data
-        state = self.coordinator.data.get("state")
-        if state is None:
-            _LOGGER.debug("No state data available")
-            return None
+        # Try to get mode directly from device (pywemo CrockPot has a mode attribute)
+        mode_value = self.coordinator.data.get("mode")
 
-        # Convert state number to mode string
-        state_str = str(state)
-        mode = MODES.get(state_str, "Off")
-        _LOGGER.debug("Current state: %s (raw: %s) -> mode: %s", state_str, state, mode)
+        if mode_value is not None:
+            # mode is already a CrockPotMode enum value
+            mode_name = MODES.get(mode_value)
+            if mode_name:
+                _LOGGER.debug("Current mode from device.mode: %s (%d)", mode_name, mode_value)
+                return mode_name
 
-        # Use mode_string from device if available as fallback
-        if mode == "Off" and state_str != "0":
-            mode_string = self.coordinator.data.get("mode_string")
-            if mode_string:
-                _LOGGER.warning("State %s not found in MODES, using mode_string: %s", state_str, mode_string)
-                return mode_string
+        # Fallback: use mode_string if available
+        mode_string = self.coordinator.data.get("mode_string")
+        if mode_string:
+            _LOGGER.debug("Using mode_string: %s", mode_string)
+            # Map mode_string to our standard names
+            if mode_string in ["Turned Off", "Off"]:
+                return "Off"
+            return mode_string
 
-        return mode
+        _LOGGER.warning("No mode data available from coordinator")
+        return None
 
     async def async_select_option(self, option: str) -> None:
         """Change the cooking mode."""
         # Get the numeric value for this mode
         mode_value = MODE_TO_VALUE.get(option)
-        
+
         if mode_value is None:
             _LOGGER.error("Invalid mode: %s", option)
             return
 
-        _LOGGER.info("Setting crockpot mode to %s (value: %s)", option, mode_value)
-
         try:
-            # Set the state using the numeric mode value
+            # Convert to CrockPotMode enum
+            crockpot_mode = CrockPotMode(mode_value)
+            _LOGGER.info("Setting crockpot mode to '%s' (CrockPotMode: %s, value: %d)",
+                         option, crockpot_mode.name, mode_value)
+
+            # Use the pywemo CrockPot API - update_settings(mode, time)
+            # Keep the current cooking time (0 means no change to time)
             await self.hass.async_add_executor_job(
-                self._device.set_state, int(mode_value)
+                self._device.update_settings, crockpot_mode, 0
             )
-            # Request immediate update
+            _LOGGER.info("Successfully set mode to %s", crockpot_mode.name)
+
+            # Request immediate update to reflect the change
             await self.coordinator.async_request_refresh()
+        except ValueError as err:
+            _LOGGER.error("Invalid CrockPotMode value %d for option %s: %s", mode_value, option, err)
         except Exception as err:
             _LOGGER.error("Failed to set mode to %s: %s", option, err)

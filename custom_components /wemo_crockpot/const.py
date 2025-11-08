@@ -2,11 +2,11 @@
 
 DOMAIN = "wemo_crockpot"
 
-# Crockpot mode values (numeric values sent to device)
-MODE_OFF = "0"
-MODE_WARM = "1"
-MODE_LOW = "2"
-MODE_HIGH = "3"
+# Crockpot mode values (from pywemo CrockPotMode enum)
+MODE_OFF = 0
+MODE_WARM = 50
+MODE_LOW = 51
+MODE_HIGH = 52
 
 # Mode display names mapped to values
 MODES = {
