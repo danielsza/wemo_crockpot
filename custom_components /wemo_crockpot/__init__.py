@@ -46,10 +46,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             # Get the current state - for crockpot this is the mode
             state = await hass.async_add_executor_job(device.get_state, True)
-            
+
             # Try to get additional attributes if they exist
             data = {"state": state}
-            
+
             # Check for crockpot-specific attributes
             if hasattr(device, 'mode'):
                 data["mode"] = device.mode
@@ -59,7 +59,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 data["remaining_time"] = device.remaining_time
             if hasattr(device, 'cooked_time'):
                 data["cooked_time"] = device.cooked_time
-                
+
+            # Debug logging to see actual device values
+            _LOGGER.info("Coordinator update - Raw state: %s (type: %s)", state, type(state).__name__)
+            _LOGGER.info("Coordinator update - All data: %s", data)
+
             return data
         except Exception as err:
             raise UpdateFailed(f"Error communicating with device: {err}") from err

@@ -76,18 +76,22 @@ class CrockpotModeSelect(CoordinatorEntity, SelectEntity):
         """Change the cooking mode."""
         # Get the numeric value for this mode
         mode_value = MODE_TO_VALUE.get(option)
-        
+
         if mode_value is None:
             _LOGGER.error("Invalid mode: %s", option)
             return
 
-        _LOGGER.info("Setting crockpot mode to %s (value: %s)", option, mode_value)
+        numeric_value = int(mode_value)
+        _LOGGER.info("Setting crockpot mode to '%s' (string value: '%s', numeric: %d)",
+                     option, mode_value, numeric_value)
 
         try:
             # Set the state using the numeric mode value
+            _LOGGER.info("Calling device.set_state(%d)", numeric_value)
             await self.hass.async_add_executor_job(
-                self._device.set_state, int(mode_value)
+                self._device.set_state, numeric_value
             )
+            _LOGGER.info("Successfully sent set_state(%d) to device", numeric_value)
             # Request immediate update
             await self.coordinator.async_request_refresh()
         except Exception as err:
