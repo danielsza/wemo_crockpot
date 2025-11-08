@@ -1,0 +1,286 @@
+# Example Automations for Wemo Crockpot
+# Copy this to your packages folder or configuration.yaml
+
+# Input helpers for the crockpot
+input_select:
+  crockpot_timer_duration:
+    name: Crockpot Timer Duration
+    options:
+      - "1 hour"
+      - "2 hours"
+      - "4 hours"
+      - "6 hours"
+      - "8 hours"
+      - "10 hours"
+      - "12 hours"
+    initial: "6 hours"
+    icon: mdi:timer
+
+  crockpot_recipe_preset:
+    name: Recipe Preset
+    options:
+      - "Pot Roast (8h Low)"
+      - "Chicken Soup (6h Low)"
+      - "Pulled Pork (10h Low)"
+      - "Chili (4h High)"
+      - "Beef Stew (8h Low)"
+      - "Custom"
+    icon: mdi:chef-hat
+
+# Timer entity for tracking cooking time
+timer:
+  crockpot:
+    name: Crockpot Timer
+    duration: "06:00:00"
+    icon: mdi:pot-steam
+
+# Scripts for common operations
+script:
+  start_crockpot:
+    alias: Start Crockpot
+    sequence:
+      - service: select.select_option
+        target:
+          entity_id: select.crockpot_mode
+        data:
+          option: >
+            {% if is_state('input_select.crockpot_recipe_preset', 'Chili (4h High)') %}
+              High
+            {% else %}
+              Low
+            {% endif %}
+      - service: timer.start
+        target:
+          entity_id: timer.crockpot
+        data:
+          duration: >
+            {% set duration = states('input_select.crockpot_timer_duration') %}
+            {% if duration == '1 hour' %} 01:00:00
+            {% elif duration == '2 hours' %} 02:00:00
+            {% elif duration == '4 hours' %} 04:00:00
+            {% elif duration == '6 hours' %} 06:00:00
+            {% elif duration == '8 hours' %} 08:00:00
+            {% elif duration == '10 hours' %} 10:00:00
+            {% elif duration == '12 hours' %} 12:00:00
+            {% else %} 06:00:00
+            {% endif %}
+      - service: notify.persistent_notification
+        data:
+          title: "Crockpot Started"
+          message: >
+            Cooking on {{ states('select.crockpot_mode') }} mode for 
+            {{ states('input_select.crockpot_timer_duration') }}.
+
+  stop_crockpot:
+    alias: Stop Crockpot
+    sequence:
+      - service: select.select_option
+        target:
+          entity_id: select.crockpot_mode
+        data:
+          option: "Off"
+      - service: timer.cancel
+        target:
+          entity_id: timer.crockpot
+
+  crockpot_to_warm:
+    alias: Crockpot Switch to Warm
+    sequence:
+      - service: select.select_option
+        target:
+          entity_id: select.crockpot_mode
+        data:
+          option: "Warm"
+      - service: timer.cancel
+        target:
+          entity_id: timer.crockpot
+
+# Automations
+automation:
+  # Timer finished - switch to warm
+  - id: crockpot_timer_finished
+    alias: "Crockpot: Timer Finished"
+    trigger:
+      - platform: event
+        event_type: timer.finished
+        event_data:
+          entity_id: timer.crockpot
+    action:
+      - service: select.select_option
+        target:
+          entity_id: select.crockpot_mode
+        data:
+          option: "Warm"
+      - service: notify.mobile_app
+        data:
+          title: "🍲 Crockpot Ready!"
+          message: "Your meal is done cooking. Switched to Warm mode to keep it ready."
+          data:
+            actions:
+              - action: "TURN_OFF_CROCKPOT"
+                title: "Turn Off"
+              - action: "KEEP_WARM"
+                title: "Keep Warm"
+
+  # Handle notification actions
+  - id: crockpot_notification_action
+    alias: "Crockpot: Handle Notification Action"
+    trigger:
+      - platform: event
+        event_type: mobile_app_notification_action
+    condition:
+      - condition: template
+        value_template: "{{ trigger.event.data.action in ['TURN_OFF_CROCKPOT', 'KEEP_WARM'] }}"
+    action:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ trigger.event.data.action == 'TURN_OFF_CROCKPOT' }}"
+            sequence:
+              - service: script.stop_crockpot
+          - conditions:
+              - condition: template
+                value_template: "{{ trigger.event.data.action == 'KEEP_WARM' }}"
+            sequence:
+              - service: notify.mobile_app
+                data:
+                  message: "Keeping your meal warm!"
+
+  # Warning when crockpot left on too long
+  - id: crockpot_left_on_warning
+    alias: "Crockpot: Left On Too Long Warning"
+    trigger:
+      - platform: state
+        entity_id: select.crockpot_mode
+        to: "Warm"
+        for:
+          hours: 4
+    action:
+      - service: notify.mobile_app
+        data:
+          title: "⚠️ Crockpot Warning"
+          message: "Crockpot has been on Warm for 4 hours. Consider turning it off."
+          data:
+            actions:
+              - action: "TURN_OFF_CROCKPOT"
+                title: "Turn Off Now"
+
+  # Accidentally left on overnight
+  - id: crockpot_safety_shutoff
+    alias: "Crockpot: Safety Shutoff"
+    trigger:
+      - platform: time
+        at: "01:00:00"
+    condition:
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: select.crockpot_mode
+            state: "Off"
+    action:
+      - service: notify.mobile_app
+        data:
+          title: "🚨 Crockpot Safety Alert"
+          message: "Crockpot is still on at 1 AM. Turn off?"
+          data:
+            actions:
+              - action: "TURN_OFF_CROCKPOT"
+                title: "Turn Off"
+              - action: "KEEP_RUNNING"
+                title: "Keep Running"
+
+  # Recipe preset automation
+  - id: crockpot_recipe_preset_changed
+    alias: "Crockpot: Recipe Preset Changed"
+    trigger:
+      - platform: state
+        entity_id: input_select.crockpot_recipe_preset
+    condition:
+      - condition: template
+        value_template: "{{ trigger.to_state.state != 'Custom' }}"
+    action:
+      - service: input_select.select_option
+        target:
+          entity_id: input_select.crockpot_timer_duration
+        data:
+          option: >
+            {% set preset = states('input_select.crockpot_recipe_preset') %}
+            {% if preset == 'Pot Roast (8h Low)' %} 8 hours
+            {% elif preset == 'Chicken Soup (6h Low)' %} 6 hours
+            {% elif preset == 'Pulled Pork (10h Low)' %} 10 hours
+            {% elif preset == 'Chili (4h High)' %} 4 hours
+            {% elif preset == 'Beef Stew (8h Low)' %} 8 hours
+            {% else %} 6 hours
+            {% endif %}
+
+  # Start cooking for dinner arrival
+  - id: crockpot_dinner_prep
+    alias: "Crockpot: Dinner Prep"
+    trigger:
+      - platform: time
+        at: "09:00:00"
+    condition:
+      - condition: time
+        weekday:
+          - mon
+          - tue
+          - wed
+          - thu
+          - fri
+      - condition: state
+        entity_id: input_boolean.auto_dinner_prep
+        state: "on"
+    action:
+      - service: script.start_crockpot
+
+# Sensors for tracking cooking statistics
+sensor:
+  - platform: history_stats
+    name: Crockpot Usage Today
+    entity_id: select.crockpot_mode
+    state: "Off"
+    type: time
+    start: "{{ now().replace(hour=0, minute=0, second=0) }}"
+    end: "{{ now() }}"
+    
+  - platform: history_stats
+    name: Crockpot Cook Time This Week
+    entity_id: select.crockpot_mode
+    state: "Off"
+    type: time
+    start: "{{ as_timestamp(now()) - 604800 }}"
+    end: "{{ now() }}"
+
+# Template sensors
+template:
+  - sensor:
+      - name: "Crockpot Status"
+        state: >
+          {% set mode = states('select.crockpot_mode') %}
+          {% set timer = states('timer.crockpot') %}
+          {% if mode == 'Off' %}
+            Off
+          {% elif timer == 'active' %}
+            {{ mode }} ({{ state_attr('timer.crockpot', 'remaining') }} remaining)
+          {% else %}
+            {{ mode }}
+          {% endif %}
+        icon: >
+          {% set mode = states('select.crockpot_mode') %}
+          {% if mode == 'Off' %}
+            mdi:pot-outline
+          {% elif mode == 'High' %}
+            mdi:fire
+          {% elif mode == 'Low' %}
+            mdi:fire-circle
+          {% elif mode == 'Warm' %}
+            mdi:pot-steam-outline
+          {% else %}
+            mdi:pot
+          {% endif %}
+
+# Input boolean for auto dinner prep
+input_boolean:
+  auto_dinner_prep:
+    name: Auto Dinner Prep
+    icon: mdi:food

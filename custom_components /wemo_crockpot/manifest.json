@@ -1,0 +1,10 @@
+{
+  "domain": "wemo_crockpot",
+  "name": "WeMo Crockpot",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/yourusername/wemo_crockpot",
+  "iot_class": "local_polling",
+  "requirements": ["pywemo==1.4.0"],
+  "version": "1.0.0"
+}
