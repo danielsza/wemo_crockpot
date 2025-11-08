@@ -55,11 +55,22 @@ class CrockpotModeSelect(CoordinatorEntity, SelectEntity):
         # Get state from coordinator data
         state = self.coordinator.data.get("state")
         if state is None:
+            _LOGGER.debug("No state data available")
             return None
-        
+
         # Convert state number to mode string
         state_str = str(state)
-        return MODES.get(state_str, "Off")
+        mode = MODES.get(state_str, "Off")
+        _LOGGER.debug("Current state: %s (raw: %s) -> mode: %s", state_str, state, mode)
+
+        # Use mode_string from device if available as fallback
+        if mode == "Off" and state_str != "0":
+            mode_string = self.coordinator.data.get("mode_string")
+            if mode_string:
+                _LOGGER.warning("State %s not found in MODES, using mode_string: %s", state_str, mode_string)
+                return mode_string
+
+        return mode
 
     async def async_select_option(self, option: str) -> None:
         """Change the cooking mode."""

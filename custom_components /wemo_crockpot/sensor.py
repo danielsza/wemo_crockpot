@@ -49,13 +49,13 @@ class CrockpotSensorBase(CoordinatorEntity, SensorEntity):
 class CrockpotModeSensor(CrockpotSensorBase):
     """Sensor for the current cooking mode."""
 
-    _attr_name = "Mode"
+    _attr_name = "Mode Status"
     _attr_icon = "mdi:pot-steam"
 
     def __init__(self, coordinator, device, entry):
         """Initialize the mode sensor."""
         super().__init__(coordinator, device, entry)
-        self._attr_unique_id = f"{device.serial_number}_mode"
+        self._attr_unique_id = f"{device.serial_number}_mode_status"
 
     @property
     def native_value(self) -> str:
