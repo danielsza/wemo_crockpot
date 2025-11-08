@@ -25,6 +25,8 @@ async def async_setup_entry(
         [
             CrockpotModeSensor(coordinator, device, entry),
             CrockpotRemainingTimeSensor(coordinator, device, entry),
+            CrockpotRemainingTimeHoursSensor(coordinator, device, entry),
+            CrockpotRemainingTimeMinutesSensor(coordinator, device, entry),
             CrockpotCookedTimeSensor(coordinator, device, entry),
         ]
     )
@@ -80,6 +82,44 @@ class CrockpotRemainingTimeSensor(CrockpotSensorBase):
     def native_value(self) -> int:
         """Return the remaining time in minutes."""
         return self.coordinator.data.get("remaining_time", 0)
+
+
+class CrockpotRemainingTimeHoursSensor(CrockpotSensorBase):
+    """Sensor for remaining cooking time hours portion."""
+
+    _attr_name = "Remaining Time Hours"
+    _attr_icon = "mdi:clock-time-four-outline"
+    _attr_native_unit_of_measurement = UnitOfTime.HOURS
+
+    def __init__(self, coordinator, device, entry):
+        """Initialize the remaining time hours sensor."""
+        super().__init__(coordinator, device, entry)
+        self._attr_unique_id = f"{device.serial_number}_remaining_time_hours"
+
+    @property
+    def native_value(self) -> int:
+        """Return the hours portion of remaining time."""
+        total_minutes = self.coordinator.data.get("remaining_time", 0)
+        return total_minutes // 60
+
+
+class CrockpotRemainingTimeMinutesSensor(CrockpotSensorBase):
+    """Sensor for remaining cooking time minutes portion."""
+
+    _attr_name = "Remaining Time Minutes"
+    _attr_icon = "mdi:clock-outline"
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
+
+    def __init__(self, coordinator, device, entry):
+        """Initialize the remaining time minutes sensor."""
+        super().__init__(coordinator, device, entry)
+        self._attr_unique_id = f"{device.serial_number}_remaining_time_minutes"
+
+    @property
+    def native_value(self) -> int:
+        """Return the minutes portion of remaining time."""
+        total_minutes = self.coordinator.data.get("remaining_time", 0)
+        return total_minutes % 60
 
 
 class CrockpotCookedTimeSensor(CrockpotSensorBase):
